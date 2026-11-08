@@ -3,7 +3,20 @@ chore_row_kids_v1:
     "type": "custom:button-card",
     "show_name": true,
     "show_icon": true,
-    "hold_action": { "action": "more-info" },
+    "hold_action":
+      {
+        "action": "[[[ const v = (typeof variables !== 'undefined' && variables) ? variables : {}; const engine = typeof v.pref_tts_engine === 'string' ? v.pref_tts_engine.trim() : ''; const player = typeof v.pref_tts_media_player === 'string' ? v.pref_tts_media_player.trim() : ''; const desc = typeof entity.attributes.description === 'string' ? entity.attributes.description.trim() : ''; return (engine && player && desc) ? 'call-service' : 'more-info'; ]]]",
+        "service": "tts.speak",
+        "target":
+          {
+            "entity_id": "[[[ const v = (typeof variables !== 'undefined' && variables) ? variables : {}; return typeof v.pref_tts_engine === 'string' ? v.pref_tts_engine.trim() : ''; ]]]",
+          },
+        "data":
+          {
+            "media_player_entity_id": "[[[ const v = (typeof variables !== 'undefined' && variables) ? variables : {}; return typeof v.pref_tts_media_player === 'string' ? v.pref_tts_media_player.trim() : ''; ]]]",
+            "message": "[[[ const desc = typeof entity.attributes.description === 'string' ? entity.attributes.description.trim() : ''; const nm = entity.attributes.chore_name || entity.attributes.friendly_name || ''; return desc.length > 0 ? desc : nm; ]]]",
+          },
+      },
     "tap_action":
       {
         "action": "[[[ const rawState = entity.state; const state = (rawState === 'approved' || rawState === 'already_approved') ? 'completed' : (rawState === 'approved_in_part' ? 'completed_in_part' : rawState); const canClaim = entity.attributes.can_claim === true; const blocked = ['waiting', 'missed', 'paused', 'completed_by_other', 'not_my_turn', 'standby', 'completed', 'completed_in_part']; if ((!canClaim && state !== 'claimed') || blocked.includes(state)) return 'none'; return 'call-service'; ]]]",

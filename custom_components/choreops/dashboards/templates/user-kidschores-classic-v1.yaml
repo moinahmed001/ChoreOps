@@ -114,10 +114,45 @@ views:
                       {%- set header_line = "## 👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "! \n" -%}
                     {%- endif -%}
 
+                    {#-- ===== STARS-IN-A-JAR ===== --#}
+                    {#-- A visual reward jar for pre-readers: the points number stays, and the --#}
+                    {#-- jar fills with gold stars as points accrue. --#}
+                    {%- set pref_points_per_star = 1 -%}  {#-- Points needed to earn one star in the jar. --#}
+                    {%- set pref_jar_capacity = 10 -%}    {#-- Number of star slots the jar holds before it reads "full". --#}
+                    {%- set pref_points_per_star = (pref_points_per_star | float(default=1)) -%}
+                    {%- if pref_points_per_star <= 0 -%}
+                      {%- set pref_points_per_star = 1 -%}
+                    {%- endif -%}
+                    {%- set pref_jar_capacity = (pref_jar_capacity | int(default=10)) -%}
+                    {%- if pref_jar_capacity < 1 -%}
+                      {%- set pref_jar_capacity = 1 -%}
+                    {%- endif -%}
+                    {%- set earned_stars = (points_value / pref_points_per_star) | int -%}
+                    {%- set jar_full = earned_stars >= pref_jar_capacity -%}
+                    {%- set filled_stars = pref_jar_capacity if jar_full else earned_stars -%}
+                    {%- set empty_stars = pref_jar_capacity - filled_stars -%}
+                    {%- set stars_html = "" -%}
+                    {%- for _ in range(filled_stars) -%}
+                      {%- set stars_html = stars_html ~ "<ha-icon icon='mdi:star' style='--mdc-icon-size: 22px; color: #FFC83D;'></ha-icon>" -%}
+                    {%- endfor -%}
+                    {%- for _ in range(empty_stars) -%}
+                      {%- set stars_html = stars_html ~ "<ha-icon icon='mdi:star-outline' style='--mdc-icon-size: 22px; color: var(--disabled-text-color); opacity: 0.5;'></ha-icon>" -%}
+                    {%- endfor -%}
+                    {%- set jar_caption = ("🎉 " ~ ui.get('jar_full', 'Jar full!')) if jar_full else (filled_stars|string ~ " / " ~ pref_jar_capacity|string) -%}
+                    {%- set jar_html =
+                      "<div style='margin: 6px 0 10px 0; padding: 10px 14px; border-radius: 18px; background: var(--secondary-background-color); display: flex; align-items: center; gap: 10px;'>"
+                      ~ "<ha-icon icon='mdi:cup' style='--mdc-icon-size: 34px; color: var(--primary-color); transform: rotate(180deg);'></ha-icon>"
+                      ~ "<div style='display: flex; flex-direction: column; gap: 2px;'>"
+                      ~ "<div style='display: flex; flex-wrap: wrap; gap: 1px; line-height: 1;'>" ~ stars_html ~ "</div>"
+                      ~ "<div style='font-size: 11px; font-weight: 700; color: var(--secondary-text-color);'>" ~ jar_caption ~ "</div>"
+                      ~ "</div></div>\n\n"
+                    -%}
+
                     {%- set content =
                       header_line
                       ~ ("⏸️ **" ~ ui.get('chores_are_paused', 'err-chores_are_paused') ~ "** \n" if chores_paused else
                       "#### <ha-icon icon=" ~ points_icon ~ "></ha-icon>&nbsp;&nbsp;" ~ points_label ~ ": &nbsp;&nbsp;" ~ points_display ~ "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" ~ badge_display ~ " \n"
+                      ~ jar_html
                       ~ "**📅 " ~ ui.get('weekly_completed', 'err-weekly_completed') ~ ":** &nbsp;&nbsp;" ~ weekly_completed ~ "  \n"
                       ~ "**☀️ " ~ ui.get('todays_completed', 'err-todays_completed') ~ ":** &nbsp;&nbsp;" ~ todays_completed ~ "  \n\n")
                     -%}
@@ -164,6 +199,19 @@ views:
                   {#-- ── Layout & Grid ─────────────────────────────────────────────────── --#}
 
                   {%- set pref_column_count = 2 -%}  {#-- Positive integer. --#}
+
+
+                  {#-- ── Read Aloud (hold a chore tile to hear its description) ───────────── --#}
+                  {#-- Press-and-hold a chore reads its description (or name) aloud via TTS.  --#}
+                  {#-- Leave both blank to disable - hold then falls back to 'more-info'.     --#}
+                  {#-- Set pref_tts_engine to your TTS entity (Developer Tools > States,      --#}
+                  {#-- e.g. 'tts.google_translate_en_com', 'tts.piper', 'tts.home_assistant_cloud') --#}
+                  {#-- and pref_tts_media_player to a nearby speaker                          --#}
+                  {#-- (e.g. 'media_player.kitchen', 'media_player.playroom_speaker').        --#}
+
+                  {%- set pref_tts_engine = '' -%}  {#-- Example: 'tts.google_translate_en_com' --#}
+
+                  {%- set pref_tts_media_player = '' -%}  {#-- Example: 'media_player.playroom' --#}
 
 
                   {#-- ── Time Buckets ─────────────────────────────────────────────────── --#}

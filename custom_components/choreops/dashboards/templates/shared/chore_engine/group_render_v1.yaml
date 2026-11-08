@@ -65,7 +65,9 @@
 						'pref_points_precision': pref_points_precision,
 						'gamification_enabled': gamification_enabled,
 						'points_label': points_label,
-						'points_icon': points_icon
+						'points_icon': points_icon,
+						'pref_tts_engine': pref_tts_engine | default('', true),
+						'pref_tts_media_player': pref_tts_media_player | default('', true)
 					}
 				}
 			] -%}
