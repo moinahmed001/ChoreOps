@@ -72,6 +72,7 @@ from . import const
 from .coordinator import ChoreOpsConfigEntry, ChoreOpsDataCoordinator
 from .engines.chore_engine import ChoreEngine
 from .entity import ChoreOpsCoordinatorEntity
+from .helpers.chore_image import build_image_url as build_chore_image_url
 from .helpers.device_helpers import (
     create_assignee_device_info_from_coordinator,
     create_system_device_info,
