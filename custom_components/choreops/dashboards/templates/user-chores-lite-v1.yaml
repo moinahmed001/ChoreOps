@@ -84,6 +84,7 @@ views:
                       {%- set todays_completed = (state_attr(total_sensor, 'chore_stat_approved_today') | int(default=0)) if total_sensor else 0 -%}
                       {%- set weekly_completed = (state_attr(total_sensor, 'chore_stat_approved_week') | int(default=0)) if total_sensor else 0 -%}
                       {%- set chores_paused = state_attr(dashboard_helper, 'chores_paused') | bool(false) -%}
+                      {%- set user_image_url = state_attr(dashboard_helper, 'user_image_url') | default('', true) -%}
 
                       {#-- 4. Build Display --#}
                       {%- set points_value = points_value | round(2) -%}
@@ -102,8 +103,15 @@ views:
                       {%- else -%}
                         {%- set points_display = (points_value | round(0) | int) | string -%}
                       {%- endif -%}
+                      {#-- Profile photo (44px) beside the greeting; falls back to the 👋 markdown heading when no image is set. --#}
+                      {%- set has_user_image = (user_image_url | length) > 0 -%}
+                      {%- if has_user_image -%}
+                        {%- set header_line = "<div style='display: flex; align-items: center; gap: 12px;'><img src='" ~ user_image_url ~ "' alt='" ~ name ~ "' style='width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--divider-color);'><span style='font-size: 20px; font-weight: 700;'>" ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "</span></div>\n\n" -%}
+                      {%- else -%}
+                        {%- set header_line = "## 👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "\n" -%}
+                      {%- endif -%}
                       {%- set content =
-                        "## 👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "\n"
+                        header_line
                         ~ ("**⭐ " ~ points_label ~ ":** " ~ points_display ~ "  \n" if gamification_enabled else "")
                         ~ ("⏸️ **" ~ ui.get('chores_are_paused', 'err-chores_are_paused') ~ "**  \n" if chores_paused else
                         "**🧹 " ~ ui.get('overdue', 'err-overdue') ~ ":** " ~ overdue_now|string ~ ""

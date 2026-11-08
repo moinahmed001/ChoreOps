@@ -1,11 +1,12 @@
+{%- set render_collect = render_collect | default(false) -%}
 {%- for group in button_groups -%}
 	{%- set ns.group_cards = [] -%}
 	{%- if group.buttons | length > 0 -%}
 		{%- set g_name = group.name | replace('!!!!!!!!!!! ', '') | replace(' !!!!!!!!!!!', '') -%}
 		{%- set is_overdue = 'alert' in group.icon or 'overdue' in g_name | lower -%}
 
-		{{
-			{
+		{%- if pref_show_group_headers | default(true) -%}
+			{%- set header_card = {
 				'type': 'custom:button-card',
 				'name': g_name,
 				'icon': group.icon,
@@ -40,8 +41,13 @@
 						{'color': 'var(--error-color)' if is_overdue else 'var(--primary-text-color)'}
 					]
 				}
-			}
-		}},
+			} -%}
+			{%- if render_collect -%}
+				{%- set ns.render_output = ns.render_output + [header_card] -%}
+			{%- else -%}
+{{ header_card }},
+			{%- endif -%}
+		{%- endif -%}
 
 		{%- for chore_sensor_id in group.buttons -%}
 			{%- set ns.group_cards = ns.group_cards + [
@@ -66,52 +72,54 @@
 		{%- endfor -%}
 
 		{%- if pref_chore_engine_layout_mode == 'responsive' -%}
-			{{
-				{
-					'type': 'vertical-stack',
-					'cards': [
-						{
-							'type': 'conditional',
-							'conditions': [
-								{
-									'condition': 'screen',
-									'media_query': '(max-width: 768px)'
-								}
-							],
-							'card': {
-								'type': 'grid',
-								'columns': effective_column_count_mobile,
-								'square': false,
-								'cards': ns.group_cards
+			{%- set group_card = {
+				'type': 'vertical-stack',
+				'cards': [
+					{
+						'type': 'conditional',
+						'conditions': [
+							{
+								'condition': 'screen',
+								'media_query': '(max-width: 768px)'
 							}
-						},
-						{
-							'type': 'conditional',
-							'conditions': [
-								{
-									'condition': 'screen',
-									'media_query': '(min-width: 769px)'
-								}
-							],
-							'card': {
-								'type': 'grid',
-								'columns': effective_column_count_wide,
-								'square': false,
-								'cards': ns.group_cards
-							}
+						],
+						'card': {
+							'type': 'grid',
+							'columns': effective_column_count_mobile,
+							'square': false,
+							'cards': ns.group_cards
 						}
-					]
-				}
-			}},
+					},
+					{
+						'type': 'conditional',
+						'conditions': [
+							{
+								'condition': 'screen',
+								'media_query': '(min-width: 769px)'
+							}
+						],
+						'card': {
+							'type': 'grid',
+							'columns': effective_column_count_wide,
+							'square': false,
+							'cards': ns.group_cards
+						}
+					}
+				]
+			} -%}
 		{%- else -%}
-			{{
-				{
-					'type': 'grid',
-					'columns': effective_column_count,
-					'square': false,
-					'cards': ns.group_cards
-				}
-			}},
+			{%- set group_card = {
+				'type': 'grid',
+				'columns': effective_column_count,
+				'square': false,
+				'cards': ns.group_cards
+			} -%}
+		{%- endif -%}
+
+		{%- if render_collect -%}
+			{%- set ns.render_output = ns.render_output + [group_card] -%}
+		{%- else -%}
+{{ group_card }},
 		{%- endif -%}
 	{%- endif -%}
 {%- endfor -%}

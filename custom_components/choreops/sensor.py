@@ -57,8 +57,8 @@ Legacy Sensors Imported from sensor_legacy.py (13):
     13. AssigneeBonusAppliedSensor - Bonus application count (data in dashboard helper)
 """
 
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -87,6 +87,7 @@ from .helpers.entity_helpers import (
     should_create_workflow_buttons,
 )
 from .helpers.translation_helpers import load_dashboard_translation
+from .helpers.user_image import build_image_url as build_user_image_url
 from .managers.ui_manager import HelperShardRuntimePlan
 from .sensor_legacy import (
     AssigneeBonusAppliedSensor,
@@ -652,7 +653,7 @@ def register_chore_reward_callback(
     Called once during platform setup to enable services to create new sensor entities
     after chores/rewards are added at runtime.
     """
-    global _async_add_entities_callback  # noqa: PLW0603
+    global _async_add_entities_callback
     _async_add_entities_callback = async_add_entities
 
 
@@ -1199,6 +1200,10 @@ class AssigneeChoreStatusSensor(ChoreOpsCoordinatorEntity, SensorEntity):
             const.ATTR_PURPOSE: const.TRANS_KEY_PURPOSE_CHORE_STATUS,
             const.ATTR_USER_NAME: self._assignee_name,
             const.ATTR_CHORE_NAME: self._chore_name,
+            const.ATTR_CHORE_IMAGE_URL: build_chore_image_url(
+                self._entry.entry_id,
+                chore_info.get(const.DATA_CHORE_IMAGE_PATH),
+            ),
             const.ATTR_DESCRIPTION: chore_info.get(
                 const.DATA_CHORE_DESCRIPTION, const.SENTINEL_EMPTY
             ),
@@ -5397,6 +5402,10 @@ class AssigneeDashboardHelperSensor(ChoreOpsCoordinatorEntity, SensorEntity):
             "dashboard_helpers": dashboard_helpers,
             const.ATTR_USER_NAME: self._assignee_name,
             const.ATTR_USER_ID: self._assignee_id,
+            const.ATTR_USER_IMAGE_URL: build_user_image_url(
+                self._entry.entry_id,
+                assignee_info.get(const.DATA_USER_IMAGE_PATH),
+            ),
             const.ATTR_INTEGRATION_ENTRY_ID: self._entry.entry_id,
             const.ATTR_DASHBOARD_LOOKUP_KEY: (
                 f"{self._entry.entry_id}:{self._assignee_id}"

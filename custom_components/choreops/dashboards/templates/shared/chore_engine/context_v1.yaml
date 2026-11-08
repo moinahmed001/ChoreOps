@@ -122,7 +122,8 @@
   label_group_candidates=[],
   label_button_groups=[],
   label_order=[],
-  group_cards=[]
+  group_cards=[],
+  render_output=[]
 ) -%}
 
   {#-- 4. Collect Data --#}

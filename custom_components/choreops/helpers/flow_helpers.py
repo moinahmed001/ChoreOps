@@ -127,15 +127,17 @@ eliminating the need for mapping functions. This simplifies the call site patter
 import datetime
 from typing import Any, cast
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers import config_validation as cv, selector
-import voluptuous as vol
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 
 from .. import const
 from ..utils.dt_utils import dt_parse, dt_parse_duration
 from ..utils.math_utils import parse_points_value
-from . import entity_helpers as eh, translation_helpers as th
+from . import entity_helpers as eh
+from . import translation_helpers as th
 
 # =============================================================================
 # INPUT VALIDATION HELPERS
@@ -293,6 +295,7 @@ USER_SECTION_ADMIN_APPROVAL = "section_admin_approval"
 
 USER_IDENTITY_FIELDS = (
     const.CFOF_USERS_INPUT_NAME,
+    const.CFOF_USERS_INPUT_IMAGE,
     const.CFOF_USERS_INPUT_HA_USER_ID,
     const.CFOF_USERS_INPUT_DASHBOARD_LANGUAGE,
     const.CFOF_USERS_INPUT_MOBILE_NOTIFY_SERVICE,
@@ -397,6 +400,15 @@ async def _build_user_schema_impl(
 
     identity_fields: dict[Any, Any] = {
         vol.Required(const.CFOF_USERS_INPUT_NAME, default=const.SENTINEL_EMPTY): str,
+        # Optional profile photo. FileSelector yields a one-time upload id that
+        # the flow step consumes (resize + persist). Left unset on edit = keep
+        # the existing image; the step clears the field from suggested values so
+        # it never pre-fills with a stale upload id.
+        vol.Optional(
+            const.CFOF_USERS_INPUT_IMAGE,
+        ): selector.FileSelector(
+            selector.FileSelectorConfig(accept=const.USER_IMAGE_ACCEPT)
+        ),
         vol.Optional(
             const.CFOF_USERS_INPUT_HA_USER_ID,
             default=const.SENTINEL_NO_SELECTION,
@@ -782,6 +794,7 @@ CHORE_ROOT_FORM_FIELDS = (
     const.CFOF_CHORES_INPUT_NAME,
     const.CFOF_CHORES_INPUT_DESCRIPTION,
     const.CFOF_CHORES_INPUT_ICON,
+    const.CFOF_CHORES_INPUT_IMAGE,
     const.CFOF_CHORES_INPUT_DEFAULT_POINTS,
     const.CFOF_CHORES_INPUT_ASSIGNED_USER_IDS,
     const.CFOF_CHORES_INPUT_COMPLETION_CRITERIA,
@@ -942,6 +955,15 @@ def build_chore_schema(
             const.CFOF_CHORES_INPUT_ICON,
             const.SENTINEL_EMPTY,
         ): selector.IconSelector(),
+        # Optional chore photo. FileSelector yields a one-time upload id that the
+        # flow step consumes (resize to 100x100 + persist). Left unset on edit =
+        # keep the existing image; the step clears it from suggested values so it
+        # never pre-fills with a stale upload id.
+        vol.Optional(
+            const.CFOF_CHORES_INPUT_IMAGE,
+        ): selector.FileSelector(
+            selector.FileSelectorConfig(accept=const.USER_IMAGE_ACCEPT)
+        ),
         vol.Required(
             const.CFOF_CHORES_INPUT_DEFAULT_POINTS,
             default=default.get(
@@ -1618,6 +1640,16 @@ def transform_chore_cfof_to_data(
             const.DATA_CHORE_ICON,
             const.SENTINEL_EMPTY,
         ),
+        # Resolved relative filename of the chore image, or None. The flow step
+        # resizes/persists the upload and places the stored filename under
+        # CFOF_CHORES_INPUT_IMAGE before transform; on edit with no new upload the
+        # step omits the key so the existing value is preserved via existing_chore.
+        const.DATA_CHORE_IMAGE_PATH: _resolve_form_or_existing(
+            const.CFOF_CHORES_INPUT_IMAGE,
+            const.DATA_CHORE_IMAGE_PATH,
+            None,
+        )
+        or None,
         const.DATA_CHORE_RECURRING_FREQUENCY: recurring_freq,
         const.DATA_CHORE_CUSTOM_INTERVAL: custom_interval,
         const.DATA_CHORE_CUSTOM_INTERVAL_UNIT: custom_interval_unit,

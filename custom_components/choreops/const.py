@@ -7,21 +7,21 @@ It also supports localization by defining all labels and UI texts used in sensor
 services, and options flow.
 """
 
-from enum import StrEnum
 import logging
+from enum import StrEnum
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from homeassistant.const import Platform
 import homeassistant.util.dt as dt_util
+from homeassistant.const import Platform
 
-from .migrations.pre_v50_constants import *  # noqa: F403
+from .migrations.pre_v50_constants import *
 from .utils import dt_utils
 
 
 def set_default_timezone(hass):
     """Set the default timezone based on the Home Assistant configuration."""
-    global DEFAULT_TIME_ZONE  # noqa: PLW0603
+    global DEFAULT_TIME_ZONE
     DEFAULT_TIME_ZONE = dt_util.get_time_zone(hass.config.time_zone)
     # Also configure the pure Python dt_utils module
     if DEFAULT_TIME_ZONE:
@@ -632,6 +632,7 @@ CFOF_USERS_INPUT_NOTIF_CLICK_URL: Final = "notif_click_url"
 CFOF_USERS_INPUT_NOTIF_APPROVE_CLICK_URL: Final = "notif_approve_click_url"
 CFOF_USERS_INPUT_NOTIFICATION_PRIORITY: Final = "notification_priority"
 CFOF_USERS_INPUT_NOTIFICATION_TTL: Final = "notification_ttl"
+CFOF_USERS_INPUT_IMAGE: Final = "image"
 
 # DATA RECOVERY
 CFOF_DATA_RECOVERY_INPUT_SELECTION: Final = "backup_selection"
@@ -664,6 +665,7 @@ CFOF_CHORES_INPUT_CLEAR_DUE_DATE: Final = "clear_due_date"
 CFOF_CHORES_INPUT_DESCRIPTION: Final = "chore_description"
 CFOF_CHORES_INPUT_DUE_DATE: Final = "due_date"
 CFOF_CHORES_INPUT_ICON: Final = "icon"
+CFOF_CHORES_INPUT_IMAGE: Final = "image"
 CFOF_CHORES_INPUT_COMPLETION_CRITERIA: Final = "completion_criteria"
 CFOF_CHORES_INPUT_STANDBY_CLAIM_MODE: Final = "standby_claim_mode"
 CFOF_CHORES_INPUT_LABELS: Final = "chore_labels"
@@ -1277,6 +1279,9 @@ DATA_USER_CHORES_PAUSED_UNTIL: Final = "chores_paused_until"
 DATA_USER_CHORES_PAUSED_UNPAUSE_ACTION: Final = "chores_paused_unpause_action"
 DATA_USER_ENABLE_CHORE_WORKFLOW: Final = "enable_chore_workflow"
 DATA_USER_ENABLE_GAMIFICATION: Final = "enable_gamification"
+# Relative filename of the user's uploaded profile image (lives in the
+# integration media dir, served via the registered static path). None/"" = no image.
+DATA_USER_IMAGE_PATH: Final = "image_path"
 
 # User capability defaults
 DEFAULT_USER_ENABLE_CHORE_WORKFLOW: Final = False
@@ -1492,6 +1497,9 @@ DATA_CHORE_DEFAULT_POINTS: Final = "default_points"
 DATA_CHORE_DESCRIPTION: Final = "description"
 DATA_CHORE_DUE_DATE: Final = "due_date"
 DATA_CHORE_ICON: Final = "icon"
+# Relative filename of the chore's uploaded image (lives in the integration
+# media dir, served via the registered static path). None/"" = no image.
+DATA_CHORE_IMAGE_PATH: Final = "image_path"
 DATA_CHORE_NOTIFICATION_CHANNEL: Final = "notification_channel"
 DATA_CHORE_NOTIFICATION_IMPORTANCE: Final = "notification_importance"
 DATA_CHORE_ID: Final = "chore_id"
@@ -3689,6 +3697,25 @@ ATTR_DASHBOARD_USER_NAME: Final = "user_name"
 ATTR_DASHBOARD_UI_TRANSLATIONS: Final = "ui_translations"
 ATTR_DASHBOARD_LOOKUP_KEY: Final = "dashboard_lookup_key"
 ATTR_USER_ID: Final = "user_id"
+# Dashboard-helper attribute carrying the servable URL of the user's profile
+# image (empty string when no image is set). Read by the Welcome card.
+ATTR_USER_IMAGE_URL: Final = "user_image_url"
+
+# Dashboard chore-row attribute carrying the servable URL of the chore's image
+# (empty string when no image is set). Read by the chore-row card templates.
+ATTR_CHORE_IMAGE_URL: Final = "chore_image_url"
+
+# User profile image (upload + static serving)
+# Max edge length (px) for stored profile images; larger uploads are downscaled.
+USER_IMAGE_MAX_EDGE: Final = 512
+# Max edge length (px) for stored chore images; larger uploads are downscaled.
+CHORE_IMAGE_MAX_EDGE: Final = 100
+# Subdirectory (under the HA storage dir) where per-entry user images are kept.
+USER_IMAGE_STORAGE_SUBDIR: Final = "choreops_media"
+# URL prefix the images are served under (per entry: /<prefix>/<entry_id>/<file>).
+USER_IMAGE_URL_PREFIX: Final = "/choreops_media"
+# Accepted upload mime filter for the file selector.
+USER_IMAGE_ACCEPT: Final = "image/png,image/jpeg,image/webp,image/gif"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -3858,6 +3885,7 @@ TRANS_KEY_CFOF_INVALID_ASSIGNEE_NAME: Final = "invalid_assignee_name"
 TRANS_KEY_CFOF_INVALID_APPROVER: Final = "invalid_approver"
 TRANS_KEY_CFOF_INVALID_USER_COUNT: Final = "invalid_user_count"
 TRANS_KEY_CFOF_INVALID_APPROVER_NAME: Final = "invalid_approver_name"
+TRANS_KEY_CFOF_INVALID_IMAGE: Final = "invalid_image"
 
 # Approver Chore Capability Translation Keys
 

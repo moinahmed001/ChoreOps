@@ -77,6 +77,7 @@ views:
                     {%- set highest_badge_icon = (state_attr(highest_badge_entity, 'icon') if highest_badge_entity else None) or 'mdi:medal-outline' -%}
                     {%- set points_multiplier = (state_attr(points_sensor, 'points_multiplier') | float(default=1)) if points_sensor else 1 -%}
                     {%- set chores_paused = state_attr(dashboard_helper, 'chores_paused') | bool(false) -%}
+                    {%- set user_image_url = state_attr(dashboard_helper, 'user_image_url') | default('', true) -%}
 
                     {#-- 4. Build Display --#}
                     {%- set points_value = points_value | round(2) -%}
@@ -105,8 +106,16 @@ views:
                       {%- set badge_display = "" -%}
                     {%- endif -%}
 
+                    {#-- Profile photo (48px) beside the greeting; falls back to the 👋 markdown heading when no image is set. --#}
+                    {%- set has_user_image = (user_image_url | length) > 0 -%}
+                    {%- if has_user_image -%}
+                      {%- set header_line = "<div style='display: flex; align-items: center; gap: 12px;'><img src='" ~ user_image_url ~ "' alt='" ~ name ~ "' style='width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid var(--divider-color);'><span style='font-size: 22px; font-weight: 700;'>" ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "!</span></div>\n\n" -%}
+                    {%- else -%}
+                      {%- set header_line = "## 👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "! \n" -%}
+                    {%- endif -%}
+
                     {%- set content =
-                      "## 👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "! \n"
+                      header_line
                       ~ ("⏸️ **" ~ ui.get('chores_are_paused', 'err-chores_are_paused') ~ "** \n" if chores_paused else
                       "#### <ha-icon icon=" ~ points_icon ~ "></ha-icon>&nbsp;&nbsp;" ~ points_label ~ ": &nbsp;&nbsp;" ~ points_display ~ "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" ~ badge_display ~ " \n"
                       ~ "**📅 " ~ ui.get('weekly_completed', 'err-weekly_completed') ~ ":** &nbsp;&nbsp;" ~ weekly_completed ~ "  \n"

@@ -101,6 +101,7 @@ views:
                     {%- set overdue_now = (state_attr(total_sensor, 'chore_stat_current_overdue') | int(default=0)) if total_sensor else 0 -%}
                     {%- set due_today_open = (state_attr(total_sensor, 'chore_stat_current_due_today') | int(default=0)) if total_sensor else 0 -%}
                     {%- set chores_paused = state_attr(dashboard_helper, 'chores_paused') | bool(false) -%}
+                    {%- set user_image_url = state_attr(dashboard_helper, 'user_image_url') | default('', true) -%}
 
                     {#-- 4. Build Display - essentials minimal --#}
                     {%- set p_icon = points_icon | default('mdi:star', true) -%}
@@ -146,16 +147,29 @@ views:
                       {%- set status_text = ui.get('all_caught_up', 'All Caught Up!') -%}
                     {%- endif -%}
 
-                    {%- set left_col =
+                    {#-- Profile photo spans both text lines (48px). Falls back to the 👋 emoji prefix when no image is set. --#}
+                    {%- set has_user_image = user_image_url | length > 0 -%}
+                    {%- set avatar_html = "" -%}
+                    {%- if has_user_image -%}
+                      {%- set avatar_html = "<img src='" ~ user_image_url ~ "' alt='" ~ name ~ "' style='width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--divider-color);'>" -%}
+                    {%- endif -%}
+                    {%- set greeting_prefix = "" if has_user_image else "👋 " -%}
+
+                    {%- set text_col =
                       "<div style='text-align: left; flex-grow: 1; min-width: 0;'>"
                       ~ "<div style='display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 10px; line-height: 1.2;'>"
-                      ~ "<span style='font-size: 18px; font-weight: 600;'>👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "!</span>"
+                      ~ "<span style='font-size: 18px; font-weight: 600;'>" ~ greeting_prefix ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "!</span>"
                       ~ rank_pill
                       ~ "</div>"
                       ~ "<div style='font-size: 14px; display: inline-flex; align-items: center; gap: 8px; color: " ~ status_color ~ "; font-weight: 600; line-height: 1.2; flex-wrap: wrap;'>"
                       ~ "<ha-icon icon='" ~ status_icon ~ "' style='width: 16px; height: 16px; color: " ~ status_color ~ "; transform: translateY(-2px);'></ha-icon>"
                       ~ "<span>" ~ status_text ~ "</span>"
                       ~ "</div></div>"
+                    -%}
+
+                    {#-- Avatar on the far left, greeting + status to its right. --#}
+                    {%- set left_col =
+                      "<div style='display: flex; align-items: center; gap: 14px; flex-grow: 1; min-width: 0;'>" ~ avatar_html ~ text_col ~ "</div>"
                     -%}
 
                     {%- set right_col = "" -%}
@@ -256,15 +270,17 @@ views:
 
                   {#-- ── Time Buckets ─────────────────────────────────────────────────── --#}
 
-                  {%- set pref_use_overdue_grouping = true -%}  {#-- Allowed: true, false --#}
+                  {%- set pref_use_overdue_grouping = false -%}  {#-- Allowed: true, false --#}
 
-                  {%- set pref_today_grouping_mode = 'today_morning' -%}  {#-- Options: 'off', 'today', 'today_morning' --#}
+                  {%- set pref_today_grouping_mode = 'off' -%}  {#-- Options: 'off', 'today', 'today_morning' --#}
 
                   {%- set pref_include_daily_recurring_in_today = true -%}  {#-- Allowed: true, false --#}
 
-                  {%- set pref_use_this_week_grouping = true -%}  {#-- Allowed: true, false --#}
+                  {%- set pref_use_this_week_grouping = false -%}  {#-- Allowed: true, false --#}
 
-                  {%- set pref_use_standby_grouping = true -%}  {#-- Allowed: true, false --#}
+                  {%- set pref_use_standby_grouping = false -%}  {#-- Allowed: true, false --#}
+
+                  {%- set pref_show_group_headers = false -%}  {#-- Allowed: true, false. false hides the time-bucket header rows (e.g. the "LATER" row). --#}
 
 
                   {#-- ── Exclude Filters ──────────────────────────────────────────────── --#}
@@ -343,11 +359,44 @@ views:
 
                     << template_shared.chore_engine/prepare_groups_v1 >>
 
-                    << template_shared.chore_engine/header_v1 >>
+                    {#-- Header bar and settings panel intentionally omitted: chores always show. --#}
+                    {#-- Collect group output instead of emitting inline, then wrap in one rounded box. --#}
+                    {%- set render_collect = true -%}
 
-                    {%- if not header_collapsed -%}
-                      << template_shared.chore_engine/settings_panel_v1 >>
+                    << template_shared.chore_engine/group_render_v1 >>
 
-                      << template_shared.chore_engine/group_render_v1 >>
+                    {%- if ns.render_output | length > 0 -%}
+                      {{
+                        {
+                          'type': 'custom:button-card',
+                          'show_name': false,
+                          'show_icon': false,
+                          'tap_action': {'action': 'none'},
+                          'styles': {
+                            'card': [
+                              {'padding': '12px'},
+                              {'border-radius': '16px'},
+                              {'border': '1px solid var(--divider-color)'},
+                              {'background-color': 'var(--card-background-color)'},
+                              {'box-shadow': 'none'}
+                            ],
+                            'grid': [
+                              {'grid-template-areas': '"body"'},
+                              {'grid-template-columns': '1fr'}
+                            ],
+                            'custom_fields': {
+                              'body': [{'width': '100%'}]
+                            }
+                          },
+                          'custom_fields': {
+                            'body': {
+                              'card': {
+                                'type': 'vertical-stack',
+                                'cards': ns.render_output
+                              }
+                            }
+                          }
+                        }
+                      }},
                     {%- endif -%}
                   {%- endif -%}

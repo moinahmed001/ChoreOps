@@ -83,6 +83,7 @@ views:
                     {%- set overdue_now = (state_attr(total_sensor, 'chore_stat_current_overdue') | int(default=0)) if total_sensor else 0 -%}
                     {%- set due_today_open = (state_attr(total_sensor, 'chore_stat_current_due_today') | int(default=0)) if total_sensor else 0 -%}
                     {%- set chores_paused = state_attr(dashboard_helper, 'chores_paused') | bool(false) -%}
+                    {%- set user_image_url = state_attr(dashboard_helper, 'user_image_url') | default('', true) -%}
 
                     {#-- 4. Build Display - essentials minimal --#}
                     {%- set p_icon = points_icon | default('mdi:star', true) -%}
@@ -110,9 +111,17 @@ views:
                       {%- set badge_pill = "<div style='margin-top: 7px; font-size: 12px; background: var(--secondary-background-color); padding: 4px 12px; border-radius: 14px; border: 1px solid var(--divider-color); display: inline-flex; align-items: center; justify-content: center;'><ha-icon icon='" ~ highest_badge_icon ~ "' style='width: 18px; height: 14px; margin-right: 5px; color: var(--warning-color);'></ha-icon><span style='font-weight: 600; color: var(--primary-text-color);'>" ~ highest_badge ~ mult_text ~ "</span></div>" -%}
                     {%- endif -%}
 
-                    {%- set left_col =
+                    {#-- Profile photo spans both text lines (48px). Falls back to the 👋 emoji prefix when no image is set. --#}
+                    {%- set has_user_image = user_image_url | length > 0 -%}
+                    {%- set avatar_html = "" -%}
+                    {%- if has_user_image -%}
+                      {%- set avatar_html = "<img src='" ~ user_image_url ~ "' alt='" ~ name ~ "' style='width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--divider-color);'>" -%}
+                    {%- endif -%}
+                    {%- set greeting_prefix = "" if has_user_image else "👋 " -%}
+
+                    {%- set text_col =
                       "<div style='text-align: left; flex-grow: 1; min-width: 0;'>"
-                      ~ "<div style='font-size: 18px; font-weight: 600; margin-bottom: 8px; line-height: 1.2;'>👋 " ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "!</div>"
+                      ~ "<div style='font-size: 18px; font-weight: 600; margin-bottom: 8px; line-height: 1.2;'>" ~ greeting_prefix ~ ui.get('welcome', 'err-welcome') ~ ", " ~ name ~ "!</div>"
                       ~ ("<div style='display: flex; flex-wrap: wrap; gap: 10px 18px;'><span style='display: inline-flex; align-items: center; white-space: nowrap; color: var(--warning-color);'><ha-icon icon='mdi:pause-circle-outline' style='width: 14px; height: 14px; margin-right: 5px; transform: translateY(-1px);'></ha-icon><b style='margin-left: 4px; color: var(--primary-text-color);'>" ~ ui.get('chores_are_paused', 'err-chores_are_paused') ~ "</b></span></div>" if chores_paused else
                       "<div style='font-size: 12px; color: var(--secondary-text-color); display: flex; flex-direction: column; gap: 5px; line-height: 1.15;'>"
                       ~ "<div style='display: flex; flex-wrap: wrap; gap: 10px 18px;'>"
@@ -124,6 +133,11 @@ views:
                       ~ "<span style='display: inline-flex; align-items: center; white-space: nowrap;'><ha-icon icon='mdi:calendar-week' style='width: 14px; height: 14px; margin-right: 5px; transform: translateY(-1px);'></ha-icon>" ~ ui.get('weekly_completed', 'err-weekly_completed') ~ ": <b style='margin-left: 4px; color: var(--primary-text-color);'>" ~ weekly_completed ~ "</b></span>"
                       ~ "</div>"
                       ~ "</div></div>")
+                    -%}
+
+                    {#-- Avatar on the far left, greeting + status to its right. --#}
+                    {%- set left_col =
+                      "<div style='display: flex; align-items: center; gap: 14px; flex-grow: 1; min-width: 0;'>" ~ avatar_html ~ text_col ~ "</div>"
                     -%}
 
                     {%- set right_col = "" -%}

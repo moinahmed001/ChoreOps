@@ -46,8 +46,8 @@ See Also:
 from __future__ import annotations
 
 import datetime
-from typing import Any, Literal, cast
 import uuid
+from typing import Any, Literal, cast
 
 from . import const
 from .type_defs import AssigneeData, BadgeData, ChoreData, RewardData, UserData
@@ -189,9 +189,21 @@ def _normalize_user_select_value(value: Any) -> str:
     return str(value) if value else ""
 
 
-def _resolve_or_create_internal_id(existing: dict[str, Any] | None) -> str:
-    """Resolve existing internal ID or generate a new UUID."""
+def _resolve_or_create_internal_id(
+    existing: dict[str, Any] | None,
+    user_input: dict[str, Any] | None = None,
+) -> str:
+    """Resolve existing internal ID or generate a new UUID.
+
+    On create (``existing`` is None) a caller may pre-seed the id by placing it
+    in ``user_input`` under ``DATA_USER_INTERNAL_ID`` - used so the flow can
+    store a per-user profile image under the final id before the record exists.
+    """
     if existing is None:
+        if user_input:
+            seeded = user_input.get(const.DATA_USER_INTERNAL_ID)
+            if isinstance(seeded, str) and seeded:
+                return seeded
         return str(uuid.uuid4())
     return str(existing.get(const.DATA_USER_INTERNAL_ID, str(uuid.uuid4())))
 
@@ -879,7 +891,7 @@ def build_user_assignment_profile(
         )
 
     # --- Internal ID: generate for create, preserve for update ---
-    internal_id = _resolve_or_create_internal_id(existing_data)
+    internal_id = _resolve_or_create_internal_id(existing_data, user_input)
 
     # --- Handle HA user and notification service sentinels ---
     ha_user_id = _normalize_user_select_value(
@@ -1243,7 +1255,7 @@ def build_user_profile(
         )
 
     # --- Internal ID: generate for create, preserve for update ---
-    internal_id = _resolve_or_create_internal_id(existing_data)
+    internal_id = _resolve_or_create_internal_id(existing_data, user_input)
 
     # --- Handle HA user and notification service sentinels ---
     ha_user_id = _normalize_user_select_value(
@@ -1345,6 +1357,19 @@ def build_user_profile(
                 {},
             )
         ),
+        # Resolved relative filename of the user's profile image, or None.
+        # The flow step resizes/persists the upload and places the stored
+        # filename under CFOF_USERS_INPUT_IMAGE before calling this builder; on
+        # edit with no new upload the step omits the key so the existing value
+        # is preserved via existing_data.
+        const.DATA_USER_IMAGE_PATH: _resolve_user_input_field(
+            user_input,
+            existing_data,
+            const.CFOF_USERS_INPUT_IMAGE,
+            const.DATA_USER_IMAGE_PATH,
+            None,
+        )
+        or None,
         const.DATA_USER_CAN_BE_ASSIGNED: bool(
             _resolve_user_input_field(
                 user_input,
@@ -1446,6 +1471,7 @@ _USER_MANAGER_PROFILE_PRESERVE_FIELDS: frozenset[str] = frozenset(
         const.DATA_USER_NOTIF_CLICK_URL,
         const.DATA_USER_NOTIF_APPROVE_CLICK_URL,
         const.DATA_USER_UI_PREFERENCES,
+        const.DATA_USER_IMAGE_PATH,
         const.DATA_USER_CHORES_PAUSED,
         const.DATA_USER_CHORES_PAUSED_UNTIL,
         const.DATA_USER_CHORES_PAUSED_UNPAUSE_ACTION,
@@ -1904,6 +1930,9 @@ def build_chore(
             const.DATA_CHORE_ICON: str(
                 get_field(const.DATA_CHORE_ICON, const.SENTINEL_EMPTY)
             ),
+            # Resolved relative filename of the chore image, or None.
+            const.DATA_CHORE_IMAGE_PATH: get_field(const.DATA_CHORE_IMAGE_PATH, None)
+            or None,
             # Assignment
             const.DATA_CHORE_ASSIGNED_USER_IDS: list(assigned_assignees_value),
             # Scheduling
@@ -2069,6 +2098,7 @@ _CHORE_DATA_RESET_PRESERVE_FIELDS: frozenset[str] = frozenset(
         const.DATA_CHORE_DESCRIPTION,
         const.DATA_CHORE_LABELS,
         const.DATA_CHORE_ICON,
+        const.DATA_CHORE_IMAGE_PATH,
         # Assignment (per-assignee CONFIG, not runtime)
         const.DATA_CHORE_ASSIGNED_USER_IDS,
         # Scheduling configuration

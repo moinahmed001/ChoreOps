@@ -210,6 +210,9 @@ class ChoreData(TypedDict):
     description: str
     chore_labels: list[str]
     icon: str
+    # Relative filename of the chore's uploaded image, stored in the integration
+    # media dir and served via a registered static path. None = none.
+    image_path: NotRequired[str | None]
 
     # Assignment
     assigned_assignees: list[str]  # List of assignee UUIDs
@@ -662,6 +665,9 @@ class AssigneeData(TypedDict):
     # in _apply_recipient_notification_options is where it becomes a number.
     notification_ttl: NotRequired[str]
     ui_preferences: NotRequired[dict[str, Any]]
+    # Relative filename of the user's uploaded profile image, stored in the
+    # integration media dir and served via a registered static path. None = none.
+    image_path: NotRequired[str | None]
 
     # Badge tracking
     badges_earned: dict[str, BadgesEarnedEntry]  # badge_id -> entry

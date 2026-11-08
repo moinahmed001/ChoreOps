@@ -7,21 +7,33 @@ Ensures consistency and reloads the integration upon changes.
 
 import asyncio
 import contextlib
+import uuid
 from copy import deepcopy
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
-import uuid
 
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector, translation
 from homeassistant.util import dt as dt_util
-import voluptuous as vol
 
-from . import const, data_builders as db
+from . import const
+from . import data_builders as db
 from .data_builders import EntityValidationError
-from .helpers import backup_helpers as bh, entity_helpers as eh, flow_helpers as fh
+from .helpers import (
+    backup_helpers as bh,
+)
+from .helpers import (
+    entity_helpers as eh,
+)
+from .helpers import (
+    flow_helpers as fh,
+)
+from .helpers import (
+    user_image as ui_image,
+)
 from .helpers.storage_helpers import get_entry_storage_key_from_entry
 from .utils.dt_utils import dt_now_utc, dt_parse, validate_daily_multi_times
 from .utils.math_utils import parse_points_adjust_values
@@ -780,6 +792,26 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
                 if self._should_pause_for_user_access_warning(user_input):
                     errors[const.CFOP_ERROR_BASE] = const.SENTINEL_EMPTY
                 else:
+                    # Pre-seed the internal id so a resized profile image is
+                    # stored under the id the record will end up using.
+                    new_user_id = str(uuid.uuid4())
+                    user_input[const.DATA_USER_INTERNAL_ID] = new_user_id
+                    try:
+                        await ui_image.async_resolve_image_field(
+                            self.hass,
+                            self.config_entry.entry_id,
+                            new_user_id,
+                            user_input,
+                        )
+                    except ValueError as err:
+                        const.LOGGER.warning("User image upload failed: %s", err)
+                        errors[const.CFOF_USERS_INPUT_IMAGE] = (
+                            const.TRANS_KEY_CFOF_INVALID_IMAGE
+                        )
+
+                if not errors and not self._should_pause_for_user_access_warning(
+                    user_input
+                ):
                     try:
                         # Use UserManager for user-profile creation (handles linked profile internally)
                         # Immediate persist for reload
@@ -866,6 +898,23 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
                 assignment_participant_assignees,
                 current_user_id=str(internal_id),
             )
+
+            if not errors:
+                try:
+                    # Resolve any new photo upload against the existing id; when
+                    # no file was chosen the key is dropped so the stored image
+                    # is preserved by the builder's existing-record merge.
+                    await ui_image.async_resolve_image_field(
+                        self.hass,
+                        self.config_entry.entry_id,
+                        str(internal_id),
+                        user_input,
+                    )
+                except ValueError as err:
+                    const.LOGGER.warning("User image upload failed: %s", err)
+                    errors[const.CFOF_USERS_INPUT_IMAGE] = (
+                        const.TRANS_KEY_CFOF_INVALID_IMAGE
+                    )
 
             if not errors:
                 if self._should_pause_for_user_access_warning(user_input):
@@ -989,6 +1038,10 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input:
             suggested_values.update(user_input)
 
+        # The image field is a one-time upload id: never pre-fill it, or the form
+        # would carry a stale/consumed id back into the FileSelector.
+        suggested_values.pop(const.CFOF_USERS_INPUT_IMAGE, None)
+
         suggested_associated_user_ids_raw = suggested_values.get(
             const.CFOF_USERS_INPUT_ASSOCIATED_USER_IDS,
             [],
@@ -1045,12 +1098,22 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_abort(reason=const.TRANS_KEY_CFOF_INVALID_APPROVER)
 
         user_name = user_profiles[internal_id][const.DATA_USER_NAME]
+        stored_image = user_profiles[internal_id].get(const.DATA_USER_IMAGE_PATH)
 
         if user_input is not None:
             # Use UserManager for user-profile deletion (immediate persist for reload)
             coordinator.user_manager.delete_user(
                 str(internal_id), immediate_persist=True
             )
+
+            # Remove the orphaned profile image from disk, if any.
+            if stored_image:
+                await self.hass.async_add_executor_job(
+                    ui_image.delete_image,
+                    self.hass,
+                    self.config_entry.entry_id,
+                    stored_image,
+                )
 
             const.LOGGER.debug(
                 "Deleted user profile '%s' with ID: %s",
@@ -1094,10 +1157,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
 
             if errors:
                 schema = fh.build_chore_schema(assignees_dict)
-                schema = self.add_suggested_values_to_schema(
-                    schema,
-                    fh.build_chore_section_suggested_values(user_input),
-                )
+                suggested = fh.build_chore_section_suggested_values(user_input)
+                schema = self.add_suggested_values_to_schema(schema, suggested)
                 schema = vol.Schema(schema.schema, extra=vol.ALLOW_EXTRA)
                 return self.async_show_form(
                     step_id=const.OPTIONS_FLOW_STEP_ADD_CHORE,
@@ -1115,6 +1176,39 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
             new_chore_data = db.build_chore(transformed_data)
             internal_id = new_chore_data[const.DATA_CHORE_INTERNAL_ID]
             chore_name = new_chore_data[const.DATA_CHORE_NAME]
+
+            # Resolve a chore image upload (resize to 100x100) against the freshly
+            # generated chore id, then persist the stored filename on the record.
+            try:
+                await ch_image.async_resolve_image_field(
+                    self.hass,
+                    self.config_entry.entry_id,
+                    str(internal_id),
+                    user_input,
+                )
+            except ValueError as err:
+                const.LOGGER.warning("Chore image upload failed: %s", err)
+                schema = fh.build_chore_schema(assignees_dict)
+                suggested = fh.build_chore_section_suggested_values(user_input)
+                suggested[fh.CHORE_SECTION_ROOT_FORM].pop(
+                    const.CFOF_CHORES_INPUT_IMAGE, None
+                )
+                schema = self.add_suggested_values_to_schema(schema, suggested)
+                schema = vol.Schema(schema.schema, extra=vol.ALLOW_EXTRA)
+                return self.async_show_form(
+                    step_id=const.OPTIONS_FLOW_STEP_ADD_CHORE,
+                    data_schema=schema,
+                    errors=fh.map_chore_form_errors(
+                        {
+                            const.CFOF_CHORES_INPUT_IMAGE: const.TRANS_KEY_CFOF_INVALID_IMAGE
+                        }
+                    ),
+                    description_placeholders={
+                        const.PLACEHOLDER_DOCUMENTATION_URL: const.DOC_URL_CHORES
+                    },
+                )
+            if resolved_image := user_input.get(const.CFOF_CHORES_INPUT_IMAGE):
+                new_chore_data[const.DATA_CHORE_IMAGE_PATH] = resolved_image
 
             # Get completion criteria and assigned assignees for routing logic
             completion_criteria = new_chore_data.get(
@@ -1387,15 +1481,54 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
                     assignees_dict,
                     preserve_optional_on_omit=True,
                 )
-                schema = self.add_suggested_values_to_schema(
-                    schema,
-                    fh.build_chore_section_suggested_values(merged_defaults),
+                suggested = fh.build_chore_section_suggested_values(merged_defaults)
+                # The image field is a one-time upload id: never pre-fill it, or
+                # the form would carry a stale/consumed id back into the picker.
+                suggested[fh.CHORE_SECTION_ROOT_FORM].pop(
+                    const.CFOF_CHORES_INPUT_IMAGE, None
                 )
+                schema = self.add_suggested_values_to_schema(schema, suggested)
                 schema = vol.Schema(schema.schema, extra=vol.ALLOW_EXTRA)
                 return self.async_show_form(
                     step_id=const.OPTIONS_FLOW_STEP_EDIT_CHORE,
                     data_schema=schema,
                     errors=errors,
+                    description_placeholders={
+                        const.PLACEHOLDER_DOCUMENTATION_URL: const.DOC_URL_CHORES
+                    },
+                )
+
+            # Resolve any new chore image upload against the existing id; when no
+            # file was chosen the key is dropped so the stored image is preserved
+            # by the transform's existing-chore fallback.
+            try:
+                await ch_image.async_resolve_image_field(
+                    self.hass,
+                    self.config_entry.entry_id,
+                    str(internal_id),
+                    user_input,
+                )
+            except ValueError as err:
+                const.LOGGER.warning("Chore image upload failed: %s", err)
+                merged_defaults = {**chore_data, **user_input}
+                schema = fh.build_chore_schema(
+                    assignees_dict,
+                    preserve_optional_on_omit=True,
+                )
+                suggested = fh.build_chore_section_suggested_values(merged_defaults)
+                suggested[fh.CHORE_SECTION_ROOT_FORM].pop(
+                    const.CFOF_CHORES_INPUT_IMAGE, None
+                )
+                schema = self.add_suggested_values_to_schema(schema, suggested)
+                schema = vol.Schema(schema.schema, extra=vol.ALLOW_EXTRA)
+                return self.async_show_form(
+                    step_id=const.OPTIONS_FLOW_STEP_EDIT_CHORE,
+                    data_schema=schema,
+                    errors=fh.map_chore_form_errors(
+                        {
+                            const.CFOF_CHORES_INPUT_IMAGE: const.TRANS_KEY_CFOF_INVALID_IMAGE
+                        }
+                    ),
                     description_placeholders={
                         const.PLACEHOLDER_DOCUMENTATION_URL: const.DOC_URL_CHORES
                     },
@@ -2605,6 +2738,7 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_abort(reason=const.TRANS_KEY_CFOF_INVALID_CHORE)
 
         chore_name = chores_dict[internal_id][const.DATA_CHORE_NAME]
+        stored_image = chores_dict[internal_id].get(const.DATA_CHORE_IMAGE_PATH)
 
         if user_input is not None:
             # Use Manager-owned CRUD method
@@ -2615,6 +2749,15 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
                 str(internal_id),
                 mutation="deleted",
             )
+
+            # Remove the orphaned chore image from disk, if any.
+            if stored_image:
+                await self.hass.async_add_executor_job(
+                    ch_image.delete_image,
+                    self.hass,
+                    self.config_entry.entry_id,
+                    stored_image,
+                )
 
             const.LOGGER.debug(
                 "Deleted Chore '%s' with ID: %s", chore_name, internal_id
@@ -3980,7 +4123,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
 
         Step 1: Select dashboard mode and release behavior.
         """
-        from .helpers import dashboard_builder as builder, dashboard_helpers as dh
+        from .helpers import dashboard_builder as builder
+        from .helpers import dashboard_helpers as dh
 
         # Refresh manifest-backed template catalog on generator entry so local
         # sync updates are visible without requiring a Home Assistant restart.
@@ -4150,7 +4294,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
 
         Step 2 create path: capture dashboard name, then route to Step 3.
         """
-        from .helpers import dashboard_builder as builder, dashboard_helpers as dh
+        from .helpers import dashboard_builder as builder
+        from .helpers import dashboard_helpers as dh
 
         errors: dict[str, str] = {}
 
@@ -4193,7 +4338,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Step 2 update path: select existing dashboard target."""
-        from .helpers import dashboard_builder as builder, dashboard_helpers as dh
+        from .helpers import dashboard_builder as builder
+        from .helpers import dashboard_helpers as dh
 
         errors: dict[str, str] = {}
 
@@ -4245,7 +4391,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Step 3 shared dashboard configuration for create/update flows."""
-        from .helpers import dashboard_builder as builder, dashboard_helpers as dh
+        from .helpers import dashboard_builder as builder
+        from .helpers import dashboard_helpers as dh
 
         errors: dict[str, str] = {}
         coordinator = self._get_coordinator()
@@ -4981,7 +5128,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
 
         Shows list of existing ChoreOps dashboards for deletion.
         """
-        from .helpers import dashboard_builder as builder, dashboard_helpers as dh
+        from .helpers import dashboard_builder as builder
+        from .helpers import dashboard_helpers as dh
 
         errors: dict[str, str] = {}
 
@@ -5465,8 +5613,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
     async def _handle_restore_backup_from_options(self, backup_reference: str):
         """Handle restoring from a specific backup file in options flow."""
         import json
-        from pathlib import Path
         import shutil
+        from pathlib import Path
 
         try:
             # Get current entry storage path
@@ -5956,8 +6104,8 @@ class ChoreOpsOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_restore_backup_confirm(self, user_input=None):
         """Confirm backup restoration."""
-        from pathlib import Path
         import shutil
+        from pathlib import Path
 
         # Get backup filename from context (set by select_backup_to_restore step)
         backup_filename = getattr(self, "_backup_to_restore", None)

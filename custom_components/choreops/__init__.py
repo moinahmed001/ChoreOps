@@ -20,7 +20,8 @@ from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 
 from . import const
 from .coordinator import ChoreOpsConfigEntry, ChoreOpsDataCoordinator
-from .helpers import backup_helpers as bh, dashboard_helpers as dh
+from .helpers import backup_helpers as bh
+from .helpers import dashboard_helpers as dh
 from .helpers.storage_helpers import get_entry_storage_key_from_entry
 from .notification_action_handler import async_handle_notification_action
 from .services import async_setup_services, async_unload_services
@@ -88,6 +89,45 @@ async def _update_all_assignee_device_names(
             updated_count,
             entry.title,
         )
+
+
+async def _async_register_user_image_static_path(
+    hass: HomeAssistant, entry: ChoreOpsConfigEntry
+) -> None:
+    """Register HTTP static serving for this entry's user profile images.
+
+    Serves <storage>/choreops_media/<entry_id>/ at /choreops_media/<entry_id>/.
+    Registration is guarded per entry so a reload does not double-register.
+    """
+    from homeassistant.components.http import StaticPathConfig
+
+    from .helpers import user_image as ui_image
+
+    guard_key = f"{const.DOMAIN}_user_image_static_{entry.entry_id}"
+    if hass.data.get(guard_key):
+        return
+
+    media_dir = ui_image.get_entry_media_dir(hass, entry.entry_id)
+    # Ensure the directory exists so the static handler has a root to serve.
+    await hass.async_add_executor_job(
+        lambda: media_dir.mkdir(parents=True, exist_ok=True)
+    )
+
+    url_path = f"{const.USER_IMAGE_URL_PREFIX}/{entry.entry_id}"
+    try:
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(url_path, str(media_dir), cache_headers=False)]
+        )
+        hass.data[guard_key] = True
+    except (RuntimeError, ValueError) as err:
+        # A duplicate registration (e.g. a race on reload) is non-fatal: the
+        # path is already being served, so images still resolve.
+        const.LOGGER.debug(
+            "User image static path registration skipped for %s: %s",
+            url_path,
+            err,
+        )
+        hass.data[guard_key] = True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ChoreOpsConfigEntry) -> bool:
@@ -333,6 +373,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChoreOpsConfigEntry) -> 
 
     # Set up services required by the integration.
     async_setup_services(hass)
+
+    # Register static serving for this entry's user profile images.
+    await _async_register_user_image_static_path(hass, entry)
 
     # Forward the setup to supported platforms (sensors, buttons, etc.).
     await hass.config_entries.async_forward_entry_setups(entry, const.PLATFORMS)

@@ -4,17 +4,19 @@
 Ensures that all add/edit/delete operations reference entities via internal_id for consistency.
 """
 
-from typing import Any
 import uuid
+from typing import Any
 
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.util import dt as dt_util
-import voluptuous as vol
 
-from . import const, data_builders as db
+from . import const
+from . import data_builders as db
 from .data_builders import EntityValidationError
-from .helpers import backup_helpers as bh, flow_helpers as fh
+from .helpers import backup_helpers as bh
+from .helpers import flow_helpers as fh
 from .helpers.storage_helpers import get_entry_storage_key_from_entry
 from .migrations import pre_v50 as mp50
 from .options_flow import ChoreOpsOptionsFlowHandler
@@ -345,8 +347,8 @@ class ChoreOpsConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
     async def _handle_restore_backup(self, backup_reference: str):
         """Handle restoring from a specific backup file."""
         import json
-        from pathlib import Path
         import shutil
+        from pathlib import Path
 
         from .store import ChoreOpsStore
 
@@ -650,6 +652,12 @@ class ChoreOpsConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
         if user_input is not None:
             user_input = fh.normalize_user_form_input(user_input)
 
+            # Profile photos are not handled during initial onboarding: the
+            # config entry (and its served media dir) does not exist yet, so any
+            # uploaded file is dropped here. Admins add photos later via
+            # Configure -> Users -> Edit, where the entry media path is live.
+            user_input.pop(const.CFOF_USERS_INPUT_IMAGE, None)
+
             user_input.setdefault(
                 const.CFOF_USERS_INPUT_ASSOCIATED_USER_IDS,
                 [],
@@ -800,6 +808,12 @@ class ChoreOpsConfigFlow(config_entries.ConfigFlow, domain=const.DOMAIN):
 
         if user_input is not None:
             user_input = fh.normalize_chore_form_input(user_input)
+
+            # Chore photos are not handled during initial onboarding: the config
+            # entry (and its served media dir) does not exist yet, so any
+            # uploaded file is dropped here. Admins add photos later via
+            # Configure -> Chores -> Edit, where the entry media path is live.
+            user_input.pop(const.CFOF_CHORES_INPUT_IMAGE, None)
 
             # Build assignees_dict for name→UUID conversion
             assignees_dict = {
